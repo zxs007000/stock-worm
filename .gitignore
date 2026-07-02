@@ -13,3 +13,4 @@ build/
 *.zip
 _debug*.py
 _test*.py
+_vendor/
