@@ -1,0 +1,46 @@
+"""
+stcok_worm — 全栈A股数据源包 (基于 a-stock-data V3.3 改写)
+
+十层架构:
+    1. 行情层    tencent + mootdx + eastmoney  K线 + 实时行情 + PE/PB
+    2. 研报层    research                      个股研报 + 行业研报 + 一致预期
+    3. 信号层    signals                       龙虎榜 + 解禁 + 行业排名 + 板块归属 + 涨停池
+    4. 资金面    eastmoney                     融资融券 + 大宗交易 + 股东户数 + 分红 + 资金流
+    5. 新闻层    news                          个股新闻 + 全球资讯
+    6. 基础数据  fundamentals                  季报快照 + 公司信息
+    7. 公告层    filings                       巨潮全量公告
+    8. 期权层    options                       ETF期权T型报价 + 希腊字母 + IV
+    9. 可转债    cb_sina                       可转债列表 + 日线 (独有)
+   10. 宏观      bond_yield + index            国债收益率 + ETF净值 (独有)
+
+数据源优先级 (不封IP优先):
+    1. mootdx (通达信 TCP) — 不封IP
+    2. 腾讯财经 (HTTP) — 不封IP
+    3. 新浪/巨潮 (HTTP) — 低风险
+    4. 东财 (HTTP) — 仅用于独有数据，已内置限流防封
+
+用法:
+    from stcok_worm import tencent, mootdx, eastmoney, research, signals
+    from stcok_worm import news, fundamentals, filings, options
+    from stcok_worm import cb_sina, bond_yield, idx_src
+"""
+
+from . import tencent
+from . import mootdx_source as mootdx
+from . import eastmoney
+from . import cb_sina
+from . import bond_yield
+from . import index as idx_src
+from . import research
+from . import signals
+from . import news
+from . import fundamentals
+from . import filings
+from . import options
+from . import realtime
+
+__all__ = [
+    "tencent", "mootdx", "eastmoney",
+    "research", "signals", "news", "fundamentals", "filings", "options",
+    "cb_sina", "bond_yield", "idx_src", "realtime",
+]

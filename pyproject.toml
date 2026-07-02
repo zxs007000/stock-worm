@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stcok-worm"
+version = "0.1.0"
+description = "全栈A股数据源包 — 腾讯/新浪/东方财富/通达信 多源聚合"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "cb_backtest"},
+]
+dependencies = [
+    "requests>=2.28",
+    "pandas>=2.0",
+    "akshare>=1.14",
+]
+[project.optional-dependencies]
+full = ["mootdx>=1.0"]
+
+[project.urls]
+Homepage = "https://github.com/your-username/stcok-worm"
+
+[tool.setuptools.packages.find]
+include = ["stcok_worm*"]
