@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional
 
 from .models import SentimentData
-from .crawlers import GubaCrawler
+from .crawlers import GubaCrawler, WeiboCrawler, DouyinCrawler
 from .analyzers import HybridAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,10 @@ class SentimentCollector:
         self.crawlers = {}
         if self.config.enable_guba:
             self.crawlers["guba"] = GubaCrawler(delay=self.config.request_delay)
+        if self.config.enable_weibo:
+            self.crawlers["weibo"] = WeiboCrawler(delay=self.config.request_delay)
+        if self.config.enable_douyin:
+            self.crawlers["douyin"] = DouyinCrawler(delay=self.config.request_delay)
 
         self.analyzer = HybridAnalyzer(
             threshold=self.config.dictionary_threshold,
