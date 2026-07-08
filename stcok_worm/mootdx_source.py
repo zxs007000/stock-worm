@@ -100,7 +100,8 @@ def available() -> bool:
         return False
 
 
-def get_kline(code: str, freq: int = 9, count: int = 800) -> Optional[list]:
+def get_kline(code: str, freq: int = 9, count: int = 800,
+              offset: int = 0) -> Optional[list]:
     """
     K线数据 (通达信 TCP).
 
@@ -108,6 +109,7 @@ def get_kline(code: str, freq: int = 9, count: int = 800) -> Optional[list]:
         code: 6位代码
         freq: 9=日K, 5=周K, 6=月K, 0=5分钟, 1=15分钟, 2=30分钟, 3=1小时
         count: 最多800条
+        offset: 从最新一根向前跳过的根数 (用于翻页取更长历史)
 
     Returns:
         [{"date", "open", "close", "high", "low", "volume", "amount"}, ...]
@@ -120,7 +122,7 @@ def get_kline(code: str, freq: int = 9, count: int = 800) -> Optional[list]:
     market = _market(code)
 
     try:
-        data = api.get_security_bars(freq, market, raw, 0, count)
+        data = api.get_security_bars(freq, market, raw, offset, count)
         if not data:
             return None
         records = []
@@ -139,6 +141,67 @@ def get_kline(code: str, freq: int = 9, count: int = 800) -> Optional[list]:
         logger.warning("tdxpy K线失败 %s: %s", code, e)
         _disconnect()
         return None
+
+
+def get_kline_history(code: str, freq: int = 9,
+                      total: int = 2000) -> Optional[list]:
+    """
+    翻页拉取长周期K线 (通达信 TCP, 不依赖 HTTP 代理).
+
+    单次 get_security_bars 上限 800 根，本函数自动按 800 翻页，
+    拼成 oldest→newest 的完整序列。
+
+    Args:
+        code: 6位代码
+        freq: 9=日K
+        total: 目标总根数 (默认 2000 ≈ 8 年日线)
+
+    Returns:
+        [{"date", "open", "close", "high", "low", "volume", "amount"}, ...]
+        按日期升序, 已去重。
+    """
+    api = _get_api()
+    if not api:
+        return None
+
+    raw = _raw_code(code)
+    market = _market(code)
+    page = 800
+    # 从最老一页开始取 (offset 大 → 时间早), 拼出来即 oldest→newest
+    offsets = list(range(0, total, page))
+    offsets.reverse()
+
+    records: List[Dict[str, Any]] = []
+    try:
+        for off in offsets:
+            data = api.get_security_bars(freq, market, raw, off, page)
+            if not data:
+                break
+            for item in data:
+                records.append({
+                    "date": str(item.get("datetime", ""))[:10],
+                    "open": float(item.get("open", 0)),
+                    "close": float(item.get("close", 0)),
+                    "high": float(item.get("high", 0)),
+                    "low": float(item.get("low", 0)),
+                    "volume": float(item.get("vol", 0)),
+                    "amount": float(item.get("amount", 0)),
+                })
+    except Exception as e:
+        logger.warning("tdxpy 长周期K线失败 %s: %s", code, e)
+        _disconnect()
+        if not records:
+            return None
+
+    # 按日期去重 (翻页边界不重叠, 但保险起见)
+    seen = set()
+    out: List[Dict[str, Any]] = []
+    for r in records:
+        if r["date"] in seen:
+            continue
+        seen.add(r["date"])
+        out.append(r)
+    return out or None
 
 
 def get_quote(code: str) -> Optional[Dict[str, Any]]:
