@@ -35,7 +35,14 @@ class GubaCrawler(SentimentCrawlerBase):
 
     def _fetch_page(self, url: str) -> str:
         fetcher = self._ensure_fetcher()
-        resp = fetcher.fetch(url, headless=True)
+        resp = fetcher.fetch(
+            url,
+            headless=True,
+            network_idle=True,
+            wait=3000,
+            block_ads=True,
+            disable_resources=True,
+        )
         return resp.text
 
     def crawl(self, code: str, page: int = 1) -> List[Post]:

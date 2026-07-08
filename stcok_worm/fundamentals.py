@@ -38,6 +38,34 @@ def quarterly_snapshot(code: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def quarterly_history(code: str, periods: int = 12) -> List[Dict[str, Any]]:
+    """多期季报历史 (东财数据中心 RPT_LICO_FN_CPD)。
+
+    与 quarterly_snapshot 同源，但拉取最近 `periods` 期（按报告期降序），
+    返回列表，可用于构建 ROE/EPS/BPS/每股经营现金流 的时间序列因子。
+    """
+    code = code.strip().split(".")[0]
+    params = {
+        "reportName": "RPT_LICO_FN_CPD",
+        "columns": "ALL",
+        "filter": f'(SECURITY_CODE="{code}")',
+        "pageNumber": "1",
+        "pageSize": str(max(1, int(periods))),
+        "sortColumns": "REPORTDATE",
+        "sortTypes": "-1",
+        "source": "WEB",
+        "client": "WEB",
+    }
+    try:
+        r = em_get(DATACENTER_URL, params=params, timeout=15)
+        d = r.json()
+        if d.get("result") and d["result"].get("data"):
+            return d["result"]["data"]
+    except Exception as exc:
+        logger.warning("quarterly_history failed for %s: %s", code, exc)
+    return []
+
+
 def company_info(code: str) -> Optional[Dict[str, Any]]:
     """个股基础信息 (东财 push2)."""
     secid = get_secid(code)

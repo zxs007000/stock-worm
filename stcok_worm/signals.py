@@ -21,17 +21,32 @@ logger = logging.getLogger(__name__)
 
 
 def dragon_tiger(code: str, page_size: int = 10) -> List[Dict[str, Any]]:
-    """个股龙虎榜席位 (东财数据中心)."""
-    secid = get_secid(code)
-    return eastmoney_push2(
-        fields="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f62,f128,f136,f115",
-        fs=f"b:{secid}",
-        page_size=page_size,
-    )
+    """个股龙虎榜席位 (datacenter-web, push2 不通时走此路)."""
+    code = code.strip().split(".")[0]
+    prefix = "SH" if code.startswith(("6","9")) else "SZ"
+    params = {
+        "reportName": "RPT_DAILYBILLBOARD_DETAILSNEW",
+        "columns": "ALL",
+        "filter": f'(SECUCODE="{code}.{prefix}")',
+        "pageNumber": "1",
+        "pageSize": str(page_size),
+        "sortColumns": "TRADE_DATE",
+        "sortTypes": "-1",
+        "source": "WEB",
+        "client": "WEB",
+    }
+    try:
+        r = em_get(DATACENTER_URL, params=params, timeout=15)
+        d = r.json()
+        if d.get("result") and d["result"].get("data"):
+            return d["result"]["data"]
+    except Exception as exc:
+        logger.warning("dragon_tiger failed for %s: %s", code, exc)
+    return []
 
 
 def dragon_tiger_daily(date: str = "", page_size: int = 50) -> List[Dict[str, Any]]:
-    """全市场每日龙虎榜 (东财数据中心)."""
+    """全市场每日龙虎榜 (datacenter-web)."""
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
     params = {
@@ -40,7 +55,7 @@ def dragon_tiger_daily(date: str = "", page_size: int = 50) -> List[Dict[str, An
         "filter": f'(TRADE_DATE=\'{date}\')',
         "pageNumber": "1",
         "pageSize": str(page_size),
-        "sortColumns": "NET_BUY_AMT",
+        "sortColumns": "BILLBOARD_NET_AMT",
         "sortTypes": "-1",
         "source": "WEB",
         "client": "WEB",

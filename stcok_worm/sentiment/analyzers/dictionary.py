@@ -77,7 +77,7 @@ class DictionaryAnalyzer:
         return pos_score, neg_score
 
     def _tokenize(self, text: str) -> List[str]:
-        parts = re.split(r'[，。！？、；：""''（）\[\]【】]', text)
+        parts = re.split('[，。！？、；：""''（）\\[\\]【】]', text)
         words = []
         for part in parts:
             for length in [4, 3, 2]:

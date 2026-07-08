@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional
 
 from .models import SentimentData
-from .crawlers import GubaCrawler, WeiboCrawler, DouyinCrawler
+from .crawlers import GubaCrawler, WeiboCrawler, DouyinCrawler, EastMoneyNewsCrawler, EastMoneyResearchCrawler
 from .analyzers import HybridAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,10 @@ class SentimentCollector:
         self.config = config or default_config
 
         self.crawlers = {}
+        # 默认启用新闻+研报（基于已有stcok_worm接口，稳定可靠）
+        self.crawlers["eastmoney_news"] = EastMoneyNewsCrawler(delay=0.5)
+        self.crawlers["eastmoney_research"] = EastMoneyResearchCrawler(delay=0.5)
+        # 可选：需要爬虫的平台
         if self.config.enable_guba:
             self.crawlers["guba"] = GubaCrawler(delay=self.config.request_delay)
         if self.config.enable_weibo:

@@ -15,8 +15,12 @@ import logging
 import random
 from typing import Any, Dict, List, Optional
 
-from tdxpy.constants import TDXParams
-from tdxpy.hq import TdxHq_API
+try:
+    from tdxpy.constants import TDXParams
+    from tdxpy.hq import TdxHq_API
+except Exception:  # tdxpy is an optional dependency (mootdx TCP only)
+    TDXParams = None
+    TdxHq_API = None
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +44,9 @@ _connected = False
 def _get_api() -> Optional[TdxHq_API]:
     """获取或重建连接。"""
     global _api, _connected
+
+    if TdxHq_API is None:
+        return None
 
     if _api and _connected:
         return _api

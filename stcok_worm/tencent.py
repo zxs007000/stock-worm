@@ -22,8 +22,16 @@ logger = logging.getLogger(__name__)
 KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 
 
+def _normalize_code(code: str) -> str:
+    """将各种代码格式统一为6位纯数字: sh600519→600519, 600519.SH→600519."""
+    code = code.strip().split(".")[0].strip().lower()
+    if code.startswith(("sh", "sz", "bj")):
+        code = code[2:]
+    return code
+
+
 def _market_prefix(code: str) -> str:
-    code = code.strip().split(".")[0]
+    code = _normalize_code(code)
     if code.startswith(("6", "9")):
         return "sh"
     elif code.startswith("8"):
@@ -33,7 +41,13 @@ def _market_prefix(code: str) -> str:
 
 def _parse_kline_data(data: dict, prefix: str, code: str) -> list:
     """解析腾讯 K-line 返回数据。"""
-    inner = data.get("data", {}).get(f"{prefix}{code}", {})
+    inner_data = data.get("data", {})
+    # 容错：空结果时 data["data"] 可能是空列表
+    if not isinstance(inner_data, dict):
+        return []
+    inner = inner_data.get(f"{prefix}{code}", {})
+    if not isinstance(inner, dict):
+        return []
     rows = inner.get("day", []) or inner.get("qfqday", []) or []
     if not rows:
         qt = inner.get("qt", {})
@@ -47,22 +61,23 @@ def get_kline(code: str, period: str = "day") -> Optional[list]:
     A股K线 (腾讯财经).
 
     Args:
-        code: 6位代码 (如 "688017")
+        code: 6位代码 (如 "688017")，也兼容 "sh600519" / "600519.SH"
         period: day/week/month
 
     Returns:
         [{"date", "open", "close", "high", "low", "volume"}, ...]
     """
-    prefix = _market_prefix(code)
+    norm_code = _normalize_code(code)
+    prefix = _market_prefix(norm_code)
     url = (f"{KLINE_URL}?"
-           f"param={prefix}{code},{period},2000-01-01,{datetime.now().strftime('%Y-%m-%d')},2000,qfq")
+           f"param={prefix}{norm_code},{period},2000-01-01,{datetime.now().strftime('%Y-%m-%d')},2000,qfq")
     try:
         resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
         data = resp.json()
     except Exception:
         return None
 
-    rows = _parse_kline_data(data, prefix, code)
+    rows = _parse_kline_data(data, prefix, norm_code)
     if not rows:
         return None
 
@@ -129,8 +144,9 @@ def get_quotes_batch(codes: List[str]) -> Dict[str, Dict[str, Any]]:
     """
     prefixed = []
     for c in codes:
-        p = _market_prefix(c)
-        prefixed.append(f"{p}{c}")
+        nc = _normalize_code(c)
+        p = _market_prefix(nc)
+        prefixed.append(f"{p}{nc}")
 
     url = "https://qt.gtimg.cn/q=" + ",".join(prefixed)
     try:
