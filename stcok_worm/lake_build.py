@@ -232,11 +232,17 @@ def _resolve_col(df, candidates):
     return df.columns[0]
 
 
-def build_industry_map():
-    """东财行业板块 → metadata/industry_map.csv（天然 1:1 映射，适合行业中性化）。
+def build_industry_map(source: str = "eastmoney", min_bars: int = 250):
+    """行业映射 → metadata/industry_map.csv（适合行业中性化）。
 
-    带指数退避重试 + 断点续传 + 增量落盘，抗东财限流。
+    source:
+      'eastmoney'（默认）— 东财行业板块，天然 1:1，快；但 board API 偶尔整体失效。
+      'cninfo'          — 巨潮个股行业变更 stock_industry_change_cninfo，逐只、独立 host，
+                          东财 board/push2 端点全挂时的稳健兜底；取巨潮分类最新「行业大类」。
+    带指数退避重试 + 断点续传 + 增量落盘。
     """
+    if source == "cninfo":
+        return _build_industry_map_cninfo(min_bars=min_bars)
     import akshare as ak
     import pandas as pd
     _, meta, _ = _paths()
@@ -293,6 +299,83 @@ def build_industry_map():
     print(df.head(10).to_string())
 
 
+def _build_industry_map_cninfo(min_bars: int = 250):
+    """巨潮个股行业变更 → industry_map.csv（东财 board/push2 全挂时的兜底源）。
+
+    stock_industry_change_cninfo 返回同一股票在多个分类标准下的历史行业，
+    取「巨潮行业分类标准」最新一条的「行业大类」作为中性化行业。逐只、独立 host，
+    带重试 + 断点续传（每 50 只落盘）。
+    """
+    import akshare as ak
+    import pandas as pd
+    _, meta, _ = _paths()
+    out = meta / "industry_map.csv"
+    prog_path = meta / "ind_map_progress.json"
+
+    done = set(load_progress(prog_path).get("cninfo_done", []))
+    rows = []
+    if out.exists():
+        try:
+            old = pd.read_csv(out, dtype=str)
+            rows = old.to_dict("records")
+            done.update(old["code"].astype(str).str.zfill(6).tolist())
+        except Exception:
+            pass
+
+    codes = [c for c in list_codes_from_daily(min_bars) if c not in done]
+    logger.info("行业映射(CNINFO): 待拉 %d / 已有 %d", len(codes), len(done))
+
+    def _pick(df):
+        if df is None or df.empty:
+            return None
+        d = df.copy()
+        std = d[d.get("分类标准", "").astype(str).str.contains("巨潮", na=False)]
+        if std.empty:
+            std = d
+        std = std.sort_values("变更日期")
+        r = std.iloc[-1]
+        # 优先行业大类，回退门类/中类
+        for col in ["行业大类", "行业门类", "行业中类", "行业次类"]:
+            v = r.get(col)
+            if isinstance(v, str) and v.strip() and v != "nan":
+                return v.strip()
+        return None
+
+    import requests as _rq
+
+    def _fetch(code):
+        """只对网络错误重试；数据缺失(如 KeyError '变更日期')立即跳过，不空耗。"""
+        for attempt in range(3):
+            try:
+                return ak.stock_industry_change_cninfo(
+                    symbol=code, start_date="20050101", end_date="20261231")
+            except (_rq.exceptions.ConnectionError, _rq.exceptions.Timeout, TimeoutError):
+                time.sleep(2.0 * (2 ** attempt))
+            except Exception:
+                return None  # 无行业变更记录/schema 缺列 → 该股无数据，快速跳过
+        return None
+
+    n_new, t0 = 0, time.time()
+    for i, code in enumerate(codes):
+        _throttle()
+        df = _fetch(code)
+        ind = _pick(df)
+        if ind:
+            rows.append({"code": code, "cninfo_industry": ind, "eastmoney_industry": ind})
+            done.add(code)
+            n_new += 1
+        if (i + 1) % 50 == 0:
+            pd.DataFrame(rows).to_csv(out, index=False, encoding="utf-8-sig")
+            save_progress(prog_path, {"cninfo_done": sorted(done)})
+            logger.info("  行业映射(CNINFO) 进度 %d/%d  已映射 %d 只  用时%.0fs",
+                        i + 1, len(codes), len(rows), time.time() - t0)
+
+    pd.DataFrame(rows).to_csv(out, index=False, encoding="utf-8-sig")
+    save_progress(prog_path, {"cninfo_done": sorted(done)})
+    logger.info("行业映射(CNINFO)完成: %d 只 -> %s (本轮新增 %d, 用时%.1fmin)",
+                len(rows), out, n_new, (time.time() - t0) / 60)
+
+
 # ---------- manifest ----------
 def write_manifest():
     import pandas as pd
@@ -338,7 +421,7 @@ def main():
     if args.only == "regulatory":
         build_regulatory(source=args.source, start=args.start, end=args.end, min_bars=args.min_bars)
     if args.only == "industry":
-        build_industry_map()
+        build_industry_map(source=args.source, min_bars=args.min_bars)
 
     if args.only in (None, "fin", "dividends", "unlock"):
         write_manifest()
