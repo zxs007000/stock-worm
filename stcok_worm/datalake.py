@@ -87,7 +87,12 @@ def load_quarterly(code: str) -> pd.DataFrame:
 
 
 def load_industry_map() -> pd.DataFrame:
-    """行业映射（metadata/industry_map.csv）。列含 code, name, eastmoney_industry 等。"""
+    """行业映射（metadata/industry_map.csv）。
+
+    由 stcok_worm.industry_map 多源模块生成，列含：
+        code, eastmoney_industry（始终填充，缺口用巨潮补）, cninfo_industry（巨潮真值）。
+    下游行业中性化优先用 eastmoney_industry（始终非空），cninfo_industry 可作交叉校验。
+    """
     f = LAKE_ROOT / "metadata" / "industry_map.csv"
     if not f.exists():
         return pd.DataFrame()
