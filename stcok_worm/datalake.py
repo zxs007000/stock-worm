@@ -92,3 +92,15 @@ def load_industry_map() -> pd.DataFrame:
     if not f.exists():
         return pd.DataFrame()
     return pd.read_csv(f)
+
+
+def load_regulatory_events(codes=None) -> pd.DataFrame:
+    """监管事件（regulatory_events.parquet：code, event_date, title, severity, event_type, url）。
+    codes 为可迭代的 6 位代码，None=全市场。"""
+    f = _fund_dir() / "regulatory_events.parquet"
+    if not f.exists():
+        return pd.DataFrame()
+    df = pd.read_parquet(f)
+    if codes is not None:
+        df = df[df["code"].isin(set(codes))]
+    return df
