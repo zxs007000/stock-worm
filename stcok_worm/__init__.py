@@ -9,6 +9,7 @@ stcok_worm — 全栈A股数据源包 (基于 a-stock-data V3.3 改写)
     5. 新闻层    news                          个股新闻 + 全球资讯
     6. 基础数据  fundamentals + fundamentals_ext  季报快照 + 公司信息 + 86 比率 + 三张表 + 分红 + 解禁
         数据湖    datalake                      本地 parquet 湖读取（财务比率/分红/解禁/季报/行业映射/监管事件）
+    12. 数据湖构建 lake_build                   把财务比率/分红/解禁/监管/行业映射拉进本地湖（CLI: python -m stcok_worm.lake_build）
     11. 监管事件  regulatory                    立案/处罚/问询函/监管函/警示函（巨潮+东财公告，标题分级）
     7. 公告层    filings                       巨潮全量公告
     8. 期权层    options                       ETF期权T型报价 + 希腊字母 + IV
@@ -40,6 +41,7 @@ from . import news
 from . import fundamentals
 from . import fundamentals_ext
 from . import datalake
+from . import lake_build
 from . import regulatory
 from . import filings
 from . import options
@@ -48,6 +50,6 @@ from . import realtime
 __all__ = [
     "tencent", "mootdx", "eastmoney",
     "research", "signals", "news", "fundamentals", "fundamentals_ext", "datalake",
-    "regulatory", "filings", "options",
+    "lake_build", "regulatory", "filings", "options",
     "cb_sina", "bond_yield", "idx_src", "realtime",
 ]
