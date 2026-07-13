@@ -48,6 +48,8 @@ from . import industry_map
 from . import filings
 from . import options
 from . import realtime
+# JRJ / 证券之星 已按层整合到 tencent.signals.news 模块
+# from stcok_worm import tencent, signals, news
 
 __all__ = [
     "tencent", "mootdx", "eastmoney",

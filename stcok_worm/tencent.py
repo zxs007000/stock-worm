@@ -184,6 +184,86 @@ def get_quotes_batch(codes: List[str]) -> Dict[str, Dict[str, Any]]:
     return result
 
 
+# ── JRJ (金融界) K线 ──────────────────────────────────────────
+
+JRJ_KLINE_URL = "https://gateway.jrj.com/quot-kline"
+JRJ_PRICE_DIVISOR = 10000  # API 价格×10000
+JRJ_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+
+# 周期映射
+_JRJ_PERIOD_MAP = {
+    "day": "day", "week": "week", "month": "month",
+    "5m": "5minkline", "15m": "15minkline", "30m": "30minkline", "60m": "60minkline",
+    # 兼容旧格式
+    "5minkline": "5minkline", "15minkline": "15minkline",
+    "30minkline": "30minkline", "60minkline": "60minkline",
+}
+
+
+def _jrj_security_id(code: str) -> int:
+    """6位代码 → JRJ 内部 securityId (2=mkt_sz, 1=mkt_sh, 0=mkt_bj)."""
+    code = code.strip().split(".")[0].strip()
+    if code.startswith(("sh", "sz", "bj")):
+        code = code[2:]
+    if code.startswith(("6", "9")):
+        return int(f"1{code}")
+    elif code.startswith("8"):
+        return int(f"0{code}")
+    return int(f"2{code}")
+
+
+def jrj_kline(code: str, period: str = "day", count: int = 180) -> Optional[list]:
+    """A股K线 (金融界 gateway.jrj.com, 全周期).
+
+    Args:
+        code: 6位代码 (如 "000001")，兼容 sh/sz 前缀
+        period: day | week | month | 5m | 15m | 30m | 60m
+        count: 返回K线数量
+
+    Returns:
+        [{"date","open","close","high","low","volume","amount"}, ...] 或 None
+        价格已除10000为元，amount 为元
+    """
+    period = _JRJ_PERIOD_MAP.get(period, period)
+    sid = _jrj_security_id(code)
+    params = {
+        "format": "json",
+        "securityId": str(sid),
+        "type": period,
+        "direction": "left",
+        "range.num": str(count),
+    }
+    try:
+        resp = requests.get(JRJ_KLINE_URL, params=params,
+                            headers={"User-Agent": JRJ_UA, "Referer": "https://www.jrj.com.cn/"},
+                            timeout=15)
+        data = resp.json()
+    except Exception as exc:
+        logger.warning("jrj_kline failed for %s: %s", code, exc)
+        return None
+
+    rows = data.get("data", [])
+    if not rows:
+        return None
+
+    records = []
+    for r in rows:
+        try:
+            records.append({
+                "date": str(r.get("date", "")),
+                "open": float(r.get("nOpenPx", 0)) / JRJ_PRICE_DIVISOR,
+                "close": float(r.get("nLastPx", 0)) / JRJ_PRICE_DIVISOR,
+                "high": float(r.get("nHighPx", 0)) / JRJ_PRICE_DIVISOR,
+                "low": float(r.get("nLowPx", 0)) / JRJ_PRICE_DIVISOR,
+                "volume": float(r.get("llVolume", 0)),
+                "amount": float(r.get("llValue", 0)) / JRJ_PRICE_DIVISOR,
+            })
+        except (ValueError, TypeError):
+            continue
+    return records or None
+
+
 def _f(v: str) -> float:
     try:
         return float(v)

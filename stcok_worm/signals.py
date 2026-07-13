@@ -2,8 +2,12 @@
 信号层 — 龙虎榜 + 解禁 + 行业排名 + 板块归属 + 涨停池
 
 端点:
-    - dragon_tiger(code)            — 个股龙虎榜席位
-    - dragon_tiger_daily(date)      — 全市场龙虎榜
+    - dragon_tiger(code)            — 个股龙虎榜席位 (东财)
+    - dragon_tiger_daily(date)      — 全市场龙虎榜 (东财)
+    - dragon_tiger_jrj_daily(date)  — 全市场龙虎榜 (金融界, 含营业部明细)
+    - dragon_tiger_jrj_summary(date)— 龙虎榜统计 (金融界)
+    - dragon_tiger_jrj_stock(c,d)   — 个股龙虎榜席位明细 (金融界)
+    - dragon_tiger_jrj_branches(d)  — 营业部龙虎榜排行 (金融界)
     - lockup_expiry(code)           — 限售解禁日历
     - industry_ranking()            — 行业板块涨跌排名
     - sector_membership(code)       — 个股所属板块
@@ -124,6 +128,118 @@ def limit_up_pool(date: str = "", page_size: int = 50) -> List[Dict[str, Any]]:
         sort_type="desc",
         page_size=page_size,
     )
+
+
+# ── JRJ (金融界) 龙虎榜 ──────────────────────────────────────
+
+JRJ_LHB_URL = "https://gateway.jrj.com/quot-dc/v1/lhb"
+JRJ_LHB_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+
+
+def _jrj_security_id(code: str) -> int:
+    """6位代码 → JRJ 内部 securityId."""
+    code = code.strip().split(".")[0].strip()
+    if code.startswith(("sh", "sz", "bj")):
+        code = code[2:]
+    if code.startswith(("6", "9")):
+        return int(f"1{code}")
+    elif code.startswith("8"):
+        return int(f"0{code}")
+    return int(f"2{code}")
+
+
+def _jrj_lhb_post(endpoint: str, body: dict) -> Optional[Dict[str, Any]]:
+    """JRJ 龙虎榜 POST 请求封装."""
+    import requests
+    try:
+        r = requests.post(f"{JRJ_LHB_URL}/{endpoint}", json=body,
+                          headers={"User-Agent": JRJ_LHB_UA,
+                                   "Referer": "https://www.jrj.com.cn/",
+                                   "Content-Type": "application/json"},
+                          timeout=15)
+        d = r.json()
+        if d.get("code") != 20000:
+            logger.warning("jrj_lhb %s returned %s: %s", endpoint, d.get("code"), d.get("msg"))
+            return None
+        return d.get("data", {})
+    except Exception as exc:
+        logger.warning("jrj_lhb %s failed: %s", endpoint, exc)
+        return None
+
+
+def dragon_tiger_jrj_daily(date: str = "", page: int = 1,
+                            page_size: int = 50) -> Optional[Dict[str, Any]]:
+    """全市场龙虎榜 (金融界, 含持仓机构明细).
+
+    Args:
+        date: 日期 "YYYY-MM-DD"，默认今天
+        page: 页码
+        page_size: 每页数量
+
+    Returns:
+        {total, list: [{sid, code, name, market, close, changePct, turnover,
+         buyAmt, sellAmt, netAmt, buyBranch, sellBranch, reason, ...}]}
+    """
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    data = _jrj_lhb_post("stockList", {
+        "endDate": date, "pageNum": page, "pageSize": page_size,
+    })
+    if not data:
+        return None
+    return {
+        "total": data.get("total", 0),
+        "list": data.get("rows", data.get("list", [])),
+    }
+
+
+def dragon_tiger_jrj_summary(date: str = "") -> Optional[Dict[str, Any]]:
+    """龙虎榜统计 (金融界): 上榜数 / 净买额 / 净卖额."""
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    data = _jrj_lhb_post("stockCount", {"endDate": date})
+    if not data:
+        return None
+    # 返回原始统计结构
+    return data
+
+
+def dragon_tiger_jrj_stock(code: str, date: str = "") -> Optional[Dict[str, Any]]:
+    """单只股票龙虎榜席位明细 (金融界).
+
+    Args:
+        code: 6位代码
+        date: 日期
+
+    Returns:
+        {stock: {...}, tradingList: [{type, name, buyAmt, sellAmt, netAmt, ...}]}
+    """
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    sid = _jrj_security_id(code)
+    data = _jrj_lhb_post("orgList", {"endDate": date, "stockId": sid})
+    return data
+
+
+def dragon_tiger_jrj_branches(date: str = "", page: int = 1,
+                               page_size: int = 50) -> Optional[Dict[str, Any]]:
+    """营业部龙虎榜排行 (金融界).
+
+    Returns:
+        {total, list: [{branchName, buyAmt, sellAmt, netAmt, count, ...}]}
+    """
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    data = _jrj_lhb_post("branchCount", {
+        "endDate": date, "pageNum": page, "pageSize": page_size,
+    })
+    if not data:
+        return None
+    return {
+        "total": data.get("total", 0),
+        "list": data.get("rows", data.get("list", [])),
+    }
 
 
 def limit_down_pool(date: str = "", page_size: int = 50) -> List[Dict[str, Any]]:
