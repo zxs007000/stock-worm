@@ -71,31 +71,36 @@ _EM_BOARD_CACHE: dict = {"map": None}
 def _eastmoney_board_map(force: bool = False) -> dict:
     """返回 {code: industry} 全市场映射（一次性拉全部板块成分，first-board-wins）。
 
-    失败抛异常，由调用方捕获并退化为巨潮兜底。结果按模块级缓存，避免单只调用反复拉全市场。
+    失败时缓存空映射并返回 {}，避免每只股票重试 62s。由调用方退化为巨潮兜底。
     """
     if _EM_BOARD_CACHE["map"] is not None and not force:
         return _EM_BOARD_CACHE["map"]
-    import akshare as ak
-    boards = _retry(ak.stock_board_industry_name_em)
-    name_col = _resolve_col(boards, ["板块名称", "名称", "board_name"])
-    board_names = boards[name_col].astype(str).tolist()
-    mapping: dict = {}
-    for bname in board_names:
-        try:
-            _throttle()
-            cons = _retry(ak.stock_board_industry_cons_em, symbol=bname)
-        except Exception as exc:
-            logger.warning("东财板块 %s 拉取失败: %s", bname, exc)
-            continue
-        if cons is None or cons.empty:
-            continue
-        code_col = _resolve_col(cons, ["代码", "code"])
-        for code in cons[code_col].astype(str).tolist():
-            code = code.zfill(6)
-            mapping.setdefault(code, bname)  # 第一出现的板块优先（与旧 lake_build 行为一致）
-    _EM_BOARD_CACHE["map"] = mapping
-    logger.info("东财行业板块映射: %d 只 / %d 板块", len(mapping), len(board_names))
-    return mapping
+    try:
+        import akshare as ak
+        boards = _retry(ak.stock_board_industry_name_em)
+        name_col = _resolve_col(boards, ["板块名称", "名称", "board_name"])
+        board_names = boards[name_col].astype(str).tolist()
+        mapping: dict = {}
+        for bname in board_names:
+            try:
+                _throttle()
+                cons = _retry(ak.stock_board_industry_cons_em, symbol=bname)
+            except Exception as exc:
+                logger.warning("东财板块 %s 拉取失败: %s", bname, exc)
+                continue
+            if cons is None or cons.empty:
+                continue
+            code_col = _resolve_col(cons, ["代码", "code"])
+            for code in cons[code_col].astype(str).tolist():
+                code = code.zfill(6)
+                mapping.setdefault(code, bname)
+        _EM_BOARD_CACHE["map"] = mapping
+        logger.info("东财行业板块映射: %d 只 / %d 板块", len(mapping), len(board_names))
+        return mapping
+    except Exception as exc:
+        logger.warning("东财板块全面失败，缓存空映射，后续直走巨潮: %s", exc)
+        _EM_BOARD_CACHE["map"] = {}
+        return {}
 
 
 # ---------- 巨潮行业变更（逐只） ----------
