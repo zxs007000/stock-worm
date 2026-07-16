@@ -15,7 +15,7 @@ stcok_worm — 全栈A股数据源包 (基于 a-stock-data V3.3 改写)
     7. 公告层    filings                       巨潮全量公告
     8. 期权层    options                       ETF期权T型报价 + 希腊字母 + IV
     9. 可转债    cb_sina                       可转债列表 + 日线 (独有)
-   10. 宏观      bond_yield + index            国债收益率 + ETF净值 (独有)
+   10. 宏观      bond_yield + index + macro    国债收益率 + ETF净值 + GDP/M1M2M0/A股总市值(巴菲特指标原料)
 
 数据源优先级 (不封IP优先):
     1. mootdx (通达信 TCP) — 不封IP
@@ -28,6 +28,7 @@ stcok_worm — 全栈A股数据源包 (基于 a-stock-data V3.3 改写)
     from stcok_worm import news, fundamentals, filings, options
     from stcok_worm import cb_sina, bond_yield, idx_src
     from stcok_worm import fundamentals_ext, datalake, industry_map
+    from stcok_worm import macro  # GDP / M1M2M0 / A股总市值 (巴菲特指标原料)
 """
 
 from . import tencent
@@ -48,6 +49,7 @@ from . import industry_map
 from . import filings
 from . import options
 from . import realtime
+from . import macro
 # JRJ / 证券之星 已按层整合到 tencent.signals.news 模块
 # from stcok_worm import tencent, signals, news
 
@@ -55,5 +57,5 @@ __all__ = [
     "tencent", "mootdx", "eastmoney",
     "research", "signals", "news", "fundamentals", "fundamentals_ext", "datalake",
     "lake_build", "regulatory", "industry_map", "filings", "options",
-    "cb_sina", "bond_yield", "idx_src", "realtime",
+    "cb_sina", "bond_yield", "idx_src", "realtime", "macro",
 ]
