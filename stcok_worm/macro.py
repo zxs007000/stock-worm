@@ -23,6 +23,7 @@ import logging
 import re
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -173,6 +174,75 @@ def buffett_input() -> pd.DataFrame:
         left_on="date", right_on="date", how="outer",
     ).sort_values("date").reset_index(drop=True)
     return merged
+
+
+# ───────────────────────── 日频巴菲特指标(防御门控右侧预警) ─────────────────────────
+def buffett_ratio_daily(index: Optional[pd.DatetimeIndex] = None,
+                        publish_lag_days: int = 60) -> pd.Series:
+    """日频巴菲特指标 = A股总市值 / 名义GDP, 供防御门控右侧预警作 regime 调制器.
+
+    防前视:
+        - 总市值用截至 t 的已实现值(月频前向填充到日).
+        - GDP 按**发布日**对齐: 参考季末 + publish_lag_days(默认60天≈下季中发布),
+          再前向填充到日. 这样 t 日看到的 GDP 是已发布的, 不提前用当季未发布值.
+    估值漂移: 返回值供调用方用长窗口(5Y)分位判定极端, 天然去趋势(见 defensive_gating._macro_gating).
+
+    参数:
+        index: 目标日频索引(对齐到面板日期); 为 None 时返回自身日频网格.
+        publish_lag_days: GDP 发布滞后天数(参考季末起算).
+    返回:
+        pd.Series(日期索引, 巴菲特比率=总市值/GDP), 按 index 对齐(缺失前填).
+    """
+    mcap = total_market_cap_monthly()
+    gdp = gdp_quarterly()
+    if mcap.empty or gdp.empty:
+        return pd.Series(dtype=float)
+    # 总市值: 月频 -> 日频(前向填充)
+    mcap_s = mcap.set_index("date")["total_market_cap"].sort_index()
+    mcap_d = mcap_s.resample("D").ffill()
+    # GDP: 参考季末 -> 发布日(+lag) -> 日频(前向填充)
+    g = gdp.copy()
+    g = g.set_index("date")["国内生产总值-绝对值"].sort_index()
+    g_avail = g.copy()
+    g_avail.index = g_avail.index + pd.Timedelta(days=publish_lag_days)
+    g_d = g_avail.resample("D").ffill()
+    # 取交叠区间
+    lo = max(mcap_d.index.min(), g_d.index.min())
+    hi = min(mcap_d.index.max(), g_d.index.max())
+    mcap_d = mcap_d.loc[lo:hi]
+    g_d = g_d.loc[lo:hi]
+    ratio = (mcap_d / g_d).dropna()
+    ratio = ratio[ratio > 0]
+    if index is not None:
+        # 对齐到目标索引(前填, 因宏观低频; 超出范围外推为 NaN 由下游处理)
+        ratio = ratio.reindex(index.union(ratio.index)).ffill().reindex(index)
+    return ratio
+
+
+# ───────────────────────── M2 同比(流动性共振因子) ─────────────────────────
+def m2_growth_daily(index: Optional[pd.DatetimeIndex] = None, win: int = 12) -> pd.Series:
+    """M2 同比增速(月频 -> 日频前填), 供防御门控作'估值+流动性'共振的流动性侧.
+
+    用法: 巴菲特指标进入警戒区 且 M2 同比见顶回落(低于其 trailing 均值) => 共振确认系统性风险.
+    仅估值高但流动性充裕(M2 同比高企) => 共振不成立, 不(或弱)触发防御, 避免 2014-15H1 式踏空.
+
+    参数: win=12 表示 12 个月同比(YoY).
+    返回: pd.Series(日期索引, M2 同比增速, 小数).
+    """
+    d = money_supply_monthly()
+    if d.empty:
+        return pd.Series(dtype=float)
+    m2_col = [c for c in d.columns if "M2" in c]
+    if not m2_col:
+        logger.warning("m2_growth_daily: 未找到 M2 列")
+        return pd.Series(dtype=float)
+    m2 = d.set_index("date")[m2_col[0]].sort_index()
+    yoy = m2.pct_change(win)
+    yoy_d = yoy.replace([np.inf, -np.inf], np.nan).dropna()
+    yoy_d = yoy_d.resample("D").ffill()
+    if index is not None:
+        yoy_d = yoy_d.reindex(index.union(yoy_d.index)).ffill().reindex(index)
+    return yoy_d
 
 
 if __name__ == "__main__":
