@@ -105,6 +105,47 @@ def build_panel(field: str, max_periods: int = MAX_PERIODS) -> pd.DataFrame:
     return panel
 
 
+def stock_detail(code: str) -> pd.DataFrame:
+    """爬取个股财务摘要全历史(中国证券网个股详情页).
+
+    URL: https://data.cnstock.com/gpsj/cwsj/{code}.html
+    返回: DataFrame(index=报告期, columns=14个指标), 含 23 年(2001-2024)季报数据.
+    """
+    import re
+    code = str(code).split(".")[0]
+    url = f"https://data.cnstock.com/gpsj/cwsj/{code}.html"
+    try:
+        _throttle()
+        r = requests.get(url, headers=HEADERS, timeout=15)
+        r.raise_for_status()
+        r.encoding = "utf-8"
+    except Exception as e:
+        logger.warning("cnstock stock_detail(%s) fetch failed: %s", code, repr(e)[:80])
+        return pd.DataFrame()
+    tables = re.findall(r"<table[^>]*>(.*?)</table>", r.text, re.S)
+    if not tables:
+        return pd.DataFrame()
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", tables[0], re.S)
+    cols = ["序号", "报告期", "净利润同比", "每股收益(本期)", "每股收益(同比)",
+            "每股净资产(本期)", "每股净资产(同比)", "净资产收益率(本期)", "净资产收益率(同比)",
+            "每股现金流(本期)", "每股现金流(同比)", "毛利率(本期)", "毛利率(同比)", "分配方案"]
+    data = []
+    for r in rows[3:]:
+        cells = re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", r, re.S)
+        clean = [re.sub(r"<[^>]+>", "", c).strip() for c in cells]
+        if len(clean) >= len(cols):
+            data.append(clean[: len(cols)])
+    if not data:
+        return pd.DataFrame()
+    df = pd.DataFrame(data, columns=cols)
+    for c in df.columns[2:13]:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    if "报告期" in df.columns:
+        df["报告期"] = pd.to_datetime(df["报告期"], errors="coerce")
+        df = df.set_index("报告期").sort_index()
+    return df
+
+
 if __name__ == "__main__":
     # 自检
     p1 = fetch_period(1)
