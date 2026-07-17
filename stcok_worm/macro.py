@@ -200,18 +200,24 @@ def buffett_ratio_daily(index: Optional[pd.DatetimeIndex] = None,
     # 总市值: 月频 -> 日频(前向填充)
     mcap_s = mcap.set_index("date")["total_market_cap"].sort_index()
     mcap_d = mcap_s.resample("D").ffill()
-    # GDP: 参考季末 -> 发布日(+lag) -> 日频(前向填充)
+    # GDP: 只用年度值(Q4=全年累计), 前向填充到次年各季度.
+    # 否则直接用累积值(如Q1=33万亿)除以总市值(118万亿)会得到荒谬的 3.5 倍.
     g = gdp.copy()
     g = g.set_index("date")["国内生产总值-绝对值"].sort_index()
-    g_avail = g.copy()
-    g_avail.index = g_avail.index + pd.Timedelta(days=publish_lag_days)
-    g_d = g_avail.resample("D").ffill()
+    g_annual = g[g.index.quarter == 4]
+    if g_annual.empty:
+        return pd.Series(dtype=float)
+    # 发布滞后: 参考次年1月1日起可用
+    g_annual.index = g_annual.index + pd.Timedelta(days=1)  # Q4最后一天→次年1月1日
+    g_annual = g_annual.reindex(
+        pd.date_range(g_annual.index.min(), mcap_d.index.max(), freq="D")
+    ).ffill()
     # 取交叠区间
-    lo = max(mcap_d.index.min(), g_d.index.min())
-    hi = min(mcap_d.index.max(), g_d.index.max())
+    lo = max(mcap_d.index.min(), g_annual.index.min())
+    hi = min(mcap_d.index.max(), g_annual.index.max())
     mcap_d = mcap_d.loc[lo:hi]
-    g_d = g_d.loc[lo:hi]
-    ratio = (mcap_d / g_d).dropna()
+    g_annual = g_annual.loc[lo:hi]
+    ratio = (mcap_d / g_annual).dropna()
     ratio = ratio[ratio > 0]
     if index is not None:
         # 对齐到目标索引(前填, 因宏观低频; 超出范围外推为 NaN 由下游处理)
