@@ -50,14 +50,15 @@ from . import filings
 from . import options
 from . import realtime
 from . import macro
-# 证券之星数据源(三大表/分红/融资融券/行业分类) — 独立模块, 补充东财/新浪之外的数据多样性
+# 证券之星数据源(三大表/分红/融资融券/行业分类)
 from . import stockstar
-# JRJ 已整合到 tencent(news/signals/kline) 模块
+# 中国证券网财报摘要(全市场一键拉取)
+from . import cnstock
 
 __all__ = [
     "tencent", "mootdx", "eastmoney",
     "research", "signals", "news", "fundamentals", "fundamentals_ext", "datalake",
     "lake_build", "regulatory", "industry_map", "filings", "options",
     "cb_sina", "bond_yield", "idx_src", "realtime", "macro",
-    "stockstar",
+    "stockstar", "cnstock",
 ]
