@@ -14,19 +14,3 @@ build/
 _debug*.py
 _test*.py
 _vendor/
-
-# ── 数据湖 / 大体量中间产物(不要入库) ──
-stocklake/
-*.parquet
-booster_fold*.json
-shap_data_fold*.parquet
-*.log
-status.json
-restart.log
-*_stdout.log
-cnstock_build.log
-cnstock_fund.log
-drive_stdout.log
-smoke.log
-proto_*.log
-.vscode/
